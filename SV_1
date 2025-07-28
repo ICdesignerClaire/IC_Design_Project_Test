@@ -1,0 +1,126 @@
+//关键词
+
+//package
+package regs_pkg//定义
+  'include"simulator.sv"
+  'include"monitor.sv"
+endpackage
+package arb_pkg//定义
+   'include"simulator.sv"
+   'include"monitor.sv"
+  endpackage
+  module mcdf_tb;//调用
+  reg_pkg:monitor mon1=new();//两个package中同名类monitor的内容不同，实现不同的功能
+  arb_pkg:monitor mon2=new()
+  endmondule
+
+  //class——本质是数据类型
+
+  //interface——和module等价，可以包含过程语句（always&inital）和连续赋值语句，链接软硬件的桥梁
+
+  interface arb_if(input bit clk);
+       logic [1:0]=grant,request;
+       logic rst;
+  endinterface
+  
+  //直接在DUT内部使用interface接口
+  module arb(arb_if arbif);
+  always@(poseedge arbif.clk or negedge arbif.rst)
+  reg[1:0] reg1
+  reg1=.arb_if(grant);
+  endmodule
+
+  //方法2
+  interface arb_if(input bit clk);
+       logic[1:0]=grant,request;
+       logic rst
+  endinterface
+  
+  module arb(....);
+  endmodule
+
+  module top//DUT中不采用接口，在测试平台中连接（更好）
+    bit clk;
+    always #2 clk=~clk;
+    arb_if arbif(clk);//interface例化
+    arb_port al(.grant(arbif.grant),//DUT
+                .request(arbif.request),
+                .rst(arbif.rst),
+                .clk(arb_if.clk)
+                );
+     test t1(arb_if)//测试用例
+endmodule
+
+//完整的interface
+interface arb_if(input bit clk);
+   logic [1；0] grant,request;
+   logic rst;
+   clocking cb@(poseedge clk);
+    output request
+    input grant;
+   endclocking
+   modport test(clocking cb,output rst);
+   modport dut(input clk,request,rst,output grant);
+endinterface
+
+
+//clocking 避免冒险竞争，把clk驱动的同步信号封装在一个clocking里，由interface调用
+
+//modport——用来连接不同的测试情况，表明信号方向（类似插座）
+
+interface signal_test(input bit clk);//定义
+    logic[1:0]A,B;
+    logic reset;
+  clocking drami@(pose clk)
+    input #1ps A;
+    input #5;
+    output#6 B;
+  endclocking
+  modport user1(output A,input B,reset);//端口在不同的modport里设置为不同输入输出模式
+  modport user2（clocking cb，input reset）；
+endinterface
+
+module dut( (signal_test.user1 intf)
+);
+  intf.A=intf.B;
+endmodule
+
+//program 可在module里直接被例化，语句块里不能出现硬件相关的过程语句和实例（always&module..）,也不能有其他program，可以有initial，task等
+//内部定义采用阻塞赋值，驱动外部硬件非阻塞，$exit()强制结束program
+//优势：将testbench和dut分开，可用于testcase以及封装与测试案例相关数据变量——module不可
+
+//块内声明
+//always_comb——组合逻辑，无需敏感信号，避免latch警告（若需latch警告，则使用always_latch）
+//always_ff——时序电路，需要敏感信号，一定是边沿敏感，避免出现flip-flop触发器警告
+//always_latch——生成latch
+
+//for（int i=0; i<=5; i++）——i可内部定义
+//foreach（src[i]）——可有变量
+
+//数组
+reg[15:0]ram[0:4095];//非组合型
+logic[0:4095][15:0]ram;//组合型
+
+int a1[0:7][0:1023]='{defult:8'h55};
+byte a[0:3][10:3];
+a[1][0]=8'h1;
+a[3]='('hF,'hA,'hC,'hE);
+
+logic[1:0][1:0][7:0]a;
+a[1:0][1:0]=1'b0;
+a=32'h1a2b3c4d;
+
+//function——不会消耗仿真时间，不可以延时，不能含有控制仿真时间的语句
+//至少包含一个输入输出变量传参
+//无法调用task，只能调用function
+//只能返回一个数值
+//函数返回可以通过调用return，不需要返回值是可将函数定义为viod
+
+//task
+//可能消耗仿真时间，可包含控制仿真时间的语句
+//任务可以没有输入输出变量
+//可调用task，也可调用function
+//任务和viod function不会返回数值，一般通过output直接输出
+//任务没有返回值，也可以用return结束task
+
+
