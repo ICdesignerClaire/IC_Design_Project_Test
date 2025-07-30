@@ -1,0 +1,144 @@
+//过程块——声明
+
+
+logic signed [7:0] a;//声明
+
+a=-1;//过程
+
+//always+initial+final
+
+initial begin 
+
+end
+
+always@()begin
+
+end
+
+final
+
+//initial&always之间没有时序关系，
+
+//3个always
+//always_comb——如果行为不是组合逻辑，工具会检查报警
+always_comb begin:
+     if(sel)
+       out=b;
+     else
+       out=a;
+end
+//always@（*）与always_comb的区别:comb在时间0时自动执行，@（*）会等待直至信号变化
+always@(*) begin:
+     if(sel)
+       out=b;
+     else
+       out=a;
+end 
+
+//always_latch——结构与always_comb相同的；如果结构中的行为不代表锁存逻辑，工具应该执行额外的检查并警告
+always_latch begin:
+     if(enable)
+        out=in;
+end
+
+//always_ff
+
+//final
+final begin
+    $$display("")
+
+//过程语句控制
+
+//循环//for；while 和 do while（先执行再判断所以至少进行一次）；foreach（常用于遍历元素）；forever
+（永久循环，用来在软件世界代替 always）；repeat（确定次数的循环）//break 和 continue 用法和其他语言一样，注意函数和任务中也可以用 return 提前跳出
+
+//除了和Verilog一样的if else 和 case，还有以下特殊的
+//unique if——如果condition没有一个匹配&没有加else语句，会报告一个错误；如果超过一个condition匹配，也会报告错误
+//unique0 if——如果没有一个condition匹配也不会报错
+
+//同样，unique case——如果没有一个case匹配且，则会报告一个错误；如果超过1个condition匹配，也会报告错误，同时执行第一个匹配到的case;
+//unique0 case——如果没有一个 case 匹配也不会报错
+//如果想让顺序去执行这些case里面的东西的话，可以用 unique case
+
+//内部各子线程按顺序执行
+initial begin
+  begin
+  #10；
+  $$display("aaa")
+  end
+  begin
+  #10；
+  $$display("bbb")
+  end
+  begin
+  #10；
+  $$display("ccc")
+  end
+end
+//内部各子线程并行，直到所有子线程运行完毕才会进入下一个阶
+fork
+  begin
+  #10；
+  $$display("aaa")
+  end
+  begin
+  #10；
+  $$display("bbb")
+  end
+  begin
+  #10；
+  $$display("ccc")
+  end
+join
+
+//内部各子线程并行，直到所有子线程运行完毕才会进入下一个阶
+fork
+  begin
+  #10；
+  $$display("aaa")
+  end
+  begin
+  #10；
+  $$display("bbb")
+  end
+  begin
+  #10；
+  $$display("ccc")
+  end
+joinany
+
+//内部各子线程并行，无需等待直接进入下一个阶段
+fork
+  begin
+  #10；
+  wait（a==1）；
+  $$display("aaa")
+  end
+  begin
+  #10；
+  $$display("bbb")
+  end
+  begin
+  #10；
+  $$display("ccc")
+  end
+join_none
+
+//模块取名
+begin:add
+  int s;
+  parameter p=100;
+  s=a+p;
+end:add
+
+//wait（）——相当于设置个断点，括号内的条件为真后，继续往下执行。对于线程多次通知的需求，应使用@而无法用 wait
+
+//wait_order(a,b,c)——会阻塞等待多个事件的触发，并且要求这几个事件间发生的顺序和设置的一致
+
+//wait_fork——会引起调用进程阻塞，直到它的所有子线程结束；目的是用来确保所有子进程执行结束；作用父线程下的子线程，而不包括子线程下的子线程
+
+//disable——常用的多种方式包括：disable named_block、disable task_name 和 disable fork 等，调用 disable 语句将会终止指定的进程
+
+//disable fork——作用范围是当前线程的子线程，以及子线程的子线程，子子孙孙全被终结；非常实用，常用于环境复位等
+
+
