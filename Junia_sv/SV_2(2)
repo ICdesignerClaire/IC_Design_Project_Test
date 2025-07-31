@@ -1,0 +1,14 @@
+event e;
+
+-> e;//对e事件进行触发
+
+//semaphore——多个进程可能需要使用一个稀缺的资源，当出现资源竞争时，获得一个共享资源就必须通过仲裁；semaphore提供了仲裁的功能
+//为semaphore分配内存的时候，会创建一个有一定数目key的储存桶——可以同时执行的进程数目和key的数目一致
+
+semaphoreb smTx;//创建semaphore
+new() //创建一个具有指定数量key的semaphore
+get（）//从存储桶中取出一个或多个 key
+put()//向存储桶中放回一个或多个 key
+try_get//尝试无阻塞地获取一个或多个 key
+
+//mailbox
