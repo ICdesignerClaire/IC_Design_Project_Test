@@ -1,0 +1,20 @@
+module 32bit(
+  input [31:0] data,
+  input clk,
+  input rst,
+
+interger i;
+
+  output [4:0] cnt
+);
+  always@(negedge rst, posedge clk)begin
+    if(!rst)begin
+      cnt <= 0;
+    end else begin
+      for(i=0;i<32;i=i+1)begin
+        cnt <= cnt + data[i];
+      end
+    end
+  end
+  
+endmodule
