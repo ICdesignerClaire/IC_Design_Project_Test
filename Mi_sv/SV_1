@@ -1,0 +1,149 @@
+//一、基本语法
+// package
+package reg_pkg;
+    `include "simulator.sv"
+    `include "monitor.sv"
+endpackage
+
+package arb_pkg;
+    `include "simulator.sv"
+    `include "monitor.sv"
+endpackage
+
+module medf_tb();
+reg_pkg::monitor mon1=new();
+arb_pkg::monitor mon2=new();
+endmodule
+
+//class
+
+//interface
+
+//clocking
+
+//modport
+interface signal_test(input bit clk);
+    logic [1:0]A,B;
+    logic reset;
+    clocking dram @(posedge clk);
+        input #1 A;
+        input #5
+        output #6 B;
+
+    endclocking
+
+    modport user1(output A, input B,input reset);
+    modport user2(clocking dram,input reset);
+endinterface //signal_test(input bit clk)
+
+
+module DUT (
+    signal_test.user1 port1
+);
+    
+endmodule
+
+module test (
+    signal_test.use2 port2
+);
+    
+endmodule
+
+//program
+
+
+//always_comb,always_ff,always_latch
+
+//for(int i==0;i<;i++)
+
+//forsearch(src[i])
+
+//automatic/static
+
+//extern
+
+class Adder;
+    int a,b;
+
+    extern function int get_sum();
+endclass
+
+function int Adder::get_sum();
+    return a+b;
+endfunction
+
+//二、数据类型
+
+//二值逻辑：bit，byte，shortint，int，longint 只含有0和1
+//四值逻辑：logic，integer，reg，wire
+
+//数组
+module array_demo;
+    //静态数组
+    bit[3:0] static_arr [0:7];
+    //动态数组
+    int dynamic_arr[];
+    initial dynamic_arr  = new[20];
+
+    //关联数组
+    int assoc_arr[string];
+    initial assoc_arr["addr1"]=32'hdeadbeef;
+
+    //队列
+    int queue[$]={1,2,3};
+    
+
+endmodule
+
+//结构体和联合体
+typedef struct packed {
+    logic  valid;
+    logic [7:0]  id;
+    logic [31:0] data;
+} packet_t;
+
+typedef union packed {
+    packet_t packet;
+    logic [40:0] raw;
+
+}packet_u;
+
+module struct_union_demo;
+    packet_t tx_packet;
+    packet_u rx_packet;
+
+    initial begin
+        tx_packet.valid = 1'b1;
+        tx_packet.id=8'hff;
+        tx_packet.data =32'h12345678;
+        rx_packet.raw=40'h0;
+        rx_packet.packet = tx_packet;
+    end
+endmodule
+
+//task和function
+function automatic int auto_func(int a);
+    return a*2;
+    
+endfunction
+
+function static int static_func();
+    static int count = 0;
+    count++;
+    return count;
+endfunction
+
+task  modify_value(ref int x,const ref int y);
+    x=y*3;
+endtask //
+
+initial begin
+    int a=5,b=20;
+    $display("Auto:%0d",auto_func(a));
+    $display("Static:%0d",static_func());//1
+    $display("Static:%0d",static_func());//2
+
+
+    modify_value(a,b)
+    $display("task:a=%0d",a)
+end
