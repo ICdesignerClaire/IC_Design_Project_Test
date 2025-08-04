@@ -122,28 +122,30 @@ module struct_union_demo;
 endmodule
 
 //task和function
-function automatic int auto_func(int a);
-    return a*2;
+module function_task_demo;
+    function automatic int auto_func(int a);
+        return a*2;
     
-endfunction
+    endfunction
 
-function static int static_func();
-    static int count = 0;
-    count++;
-    return count;
-endfunction
+    function static int static_func();
+        static int count = 0;
+        count++;
+        return count;
+    endfunction
 
-task  modify_value(ref int x,const ref int y);
-    x=y*3;
-endtask //
+    task  automatic modify_value(ref int x,const ref int y);
+        x=y*3;
+    endtask //
 
-initial begin
-    int a=5,b=20;
-    $display("Auto:%0d",auto_func(a));
-    $display("Static:%0d",static_func());//1
-    $display("Static:%0d",static_func());//2
+    initial begin
+        int a=5,b=20;
+        $display("Auto:%0d",auto_func(a));
+        $display("Static:%0d",static_func());//1
+        $display("Static:%0d",static_func());//2
 
 
-    modify_value(a,b)
-    $display("task:a=%0d",a)
-end
+        modify_value(a,b);
+        $display("task:a=%0d",a);
+    end
+endmodule
