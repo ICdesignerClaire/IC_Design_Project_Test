@@ -1,0 +1,138 @@
+//一、过程块
+
+//1.过程块内容
+//主要包括always，initial，final三大种
+logic signed  [7:0] a;//申明语句
+a=-11;//执行语句
+
+
+initial begin
+    
+end
+
+//always_comb不会关心是否*触发，一开始就有值（不是x）
+always @(*) begin
+    if(sel) out=a;
+    else    out=b;
+end
+
+always_comb begin : comb
+    if (sel) out=a;
+    else     out=b;
+end
+
+//always_latch必须要生成锁存器
+always_latch begin : blockName
+    if(enable) out=in;//锁存逻辑
+end
+
+//always_ff
+
+//final顺序执行
+final begin
+    $display("");
+end
+
+
+//2.过程块语句控制
+//循环：for；while；forsearch；forever；repeat
+//选择：if else ； case； unique if ；unique case
+//顺序：begin end ；fork join ；fork join_any ; fork join_none
+//（1）fork join：最后一个完成，下一进程启动;(2)fork join_any:任一完成，下一进程启动;(3)fork join_none: 下一进程直接启动
+
+//给过程块赋名
+begin:add
+    int s;
+    parameter p = 100;
+    s=a+p;
+end:add
+
+
+//二、进程
+//1.进程的控制
+//wait(a==1)当a=1时，才会往后执行
+//wait_order(a,b,c)阻塞多个事件的触发
+//wait_fork
+
+//三、事件和通信
+
+//1.仿真的原理
+//时间片time-slot(ts)是EDA进行仿真进程中的抽象时间单位
+
+//2.事件
+//(1)事件触发 ->
+//(2)等待事件 @
+//(3)事件的触发属性 
+event e;
+-> e ;
+
+//3.旗语(semaphore)和邮箱(mailbox)
+
+
+//四、接口
+
+//1.基本功能
+interface simple_bus;
+    logic req,gnt;
+    logic [7:0] addr,data;
+    logic [1:0] mode;
+    logic start,rdy;
+
+endinterface //simple_buslogic
+
+module memMod (top_vif vif,input logic clk);
+    logic avail;
+    always @(posedge clk ) vif.gnt<=vif.req & avail;
+    
+endmodule
+module cpuMod (top_vif vif,input logic clk);
+    
+endmodule
+
+
+module top;
+
+    simple_bus top_vif();
+    memMod mem(top_vif,clk);
+    cpuMod cpo(top_vif,clk);
+
+endmodule
+
+//2.modport和clocking块
+//modport整理interface内部的信号输入输出方向的作用
+//clocking保证接口内信号可以同步驱动和采样
+
+interface simple_bus(input logic clk);
+    logic gnt, rdy, req, start;
+    logic [1:0] mode;
+    logic [7:0] addr, data;
+
+    modport cpu (
+    input gnt,rdy,
+    output req,addr,mode,start,
+    inout data
+    );
+
+    modport mem (
+    output gnt,rdy,
+    input req,addr,mode,start,
+    inout data
+    );
+
+    clocking drv_cb @(posedge clk);
+        input a;//input抓的是DUT的输出
+        input b;
+        input c;
+        output d;
+    endclocking
+endinterface
+
+module test_modport;
+    simple_bus dif(clk);
+    memMod mem0(dif.mem , clk);
+    cpuMod cpu0(dif.cpu , clk);
+endmodule
+//特点
+//module内可直接用interface
+//class里只能用 virtual interface
+//接口信号最好用logic，因为logic更加灵活，支持过程赋值
