@@ -1,0 +1,168 @@
+//一、SV的面向对象
+
+//1.面向对象的基本特点：封装、继承、多态
+
+//（1）封装：把属性（变量）和相关方法（函数、任务）封装到一个对象（类）里面，把内部的实现细节隐藏起来，对外只暴露接口
+//     好处：使用方便；保证数据安全；方便维护
+//eg：外部调用 pkt.set_id(5);
+
+class Packet;
+    int id;
+    function void set_id(int new_id);
+        id = new_id;
+    endfunction
+endclass
+
+
+//（2）继承：子类（派生类）可以继承父类（基类）的所有成员（变量、函数、任务）；SV只支持单继承（一个子类只能有一个父类）
+//     目的：代码复用
+
+class Base;
+    int id;
+endclass
+
+class Child extends Base;
+    string name;
+
+endclass//这个Child类自动有了id这个成员
+
+//（3）多态：子类和父类中有相同的方法名，但实现方式不同
+//           当你用父类引用调用方法时，具体执行哪一版本取决于引用指向的是父类对象还是子类对象
+//        实现方式：重写虚方法（virtual）；使用句柄类型转换   
+//        非virtual函数只看句柄类型，与实际的对象无关
+class Base;
+    virtual function void display();
+        $display("Base class");
+        
+    endfunction
+endclass //Base
+
+class Child extends Base;
+    function void display();
+        $display("Child class");
+        
+    endfunction
+endclass //Child extends superClass
+
+Base obj=new;//同时完成句柄和指向对象
+obj.display();//输出Base class
+
+obj=new Child;
+obj.display();//输出Child class
+
+//2.类的基本概念
+//属性：类中定义的数据成员
+//方法：类中定义的函数或者任务
+//句柄：指向对象的指针，即该对象的地址入口
+
+//（1）成员类型：所有成员默认为public；protected表示变量和方法只能在当前类或者其子类被访问；local只允许当前类的访问
+//（2）静态成员：一个具有静态成员的类，不同的对象都共有相同的静态成员;
+            //  静态成员的特点就是其类无需实例化，就可以直接使用静态成员;利用范围操作符::
+class myclass;
+    static int count=0;
+    static function void show_count();
+            $display("Count=%0d",count);
+    endfunction
+
+endclass //className
+initial begin
+    myclass::count=5;
+    myclass::show_count();
+end
+
+            //  static和virtual不能同时存在
+        //class外的static可以直接使用，class内的static需要使用:: 
+        //模块、接口、程序默认是static;类内部默认是automatic;for/while循环默认是automatic
+class test;
+    task static bar();
+        
+    endtask //automatic
+endclass
+class test;
+    static task  bar();
+        
+    endtask //automatic
+endclass //test
+
+
+//（3）构造函数:如果没有定义new函数，系统会自动添加一个无构造的new函数，是一个空函数体，只分配存储空间，不定义个性化的初值
+//（4）this和super:默认表述当前局部变量；this表示子类变量；super表示父类变量
+class Parent;
+    int val = 10;
+endclass
+
+class Child extends Parent;
+    int val = 20;
+
+    function void print();
+        int val = 30;
+        $display("局部变量 val = %0d", val);         // 30
+        $display("子类成员 val = %0d", this.val);     // 20
+        $display("父类成员 val = %0d", super.val);    // 10
+    endfunction
+endclass
+//（5）virtual虚方法:子类和父类同名同参
+//（6）对象复制
+Packet p1;
+Packet p2;
+p1=new();
+p2=p1;//句柄传递，p2和p1都指向同一个对象
+p2=new p1;//浅复制
+p2=new;
+p2=p1.copy();//深复制
+//深复制和浅复制的区别在于内部嵌套对象，浅复制的两个对象共享嵌套内容，深复制的两个对象的嵌套对象也是独立的
+
+
+//（6）类型转换
+//向下类型转换：父类转子类 $cast(c, f) 尝试把 f 所指的对象强制转换成 Child 类型，然后赋值给 c
+//向上类型转换：子类转父类 不需要cast，直接f=c;
+
+//（7）overload,overwrite和override
+
+
+
+//二、随机约束和覆盖率
+
+//验证=随机+遍历  不能只随机：有些情况无法出现; 不能只做遍历：某些情况只有在随机情况下才会出现
+
+//1.产生随机
+//（1）SV内置函数产生随机数;（2）基于对象的随机生成;（3）标准随机函数
+
+class Stim;
+    const bit [31:0] CONGEST_ADDR=42;
+    typedef enum  { READ,WRITE,CONTROL } stim_e;
+    randc stim_e kind;
+    rand bit [31:0] len,src,dst;
+    bit congestion_test;
+
+        constraint c_stim{
+            len<100;
+            len>0;
+            if(congestion_test){
+                dst inside{[CONGEST_ADDR + 100:CONGEST_ADDR - 100]};
+                src=CONGEST_ADDR;
+            }
+            else 
+                src inside{0,[2:10],[100:107]};
+        }
+
+endclass
+
+//2.随机的控制
+//约束权重：dist操作符带有一个值的列表以及相应的权重
+
+rand int src,dst;
+constraint c_dist{
+    src dist{0:=40,[1:3]:=60};//产生40个0，1、2、3分别产生60个
+    dst dist{0:/40,[1:3]:/60};//产生40个0，1、2、3一共产生60个
+}
+
+
+//3.覆盖率
+//覆盖率指标有功能覆盖率（Function Coverage）和代码覆盖率（Code Coverage）
+
+
+
+
+
+
