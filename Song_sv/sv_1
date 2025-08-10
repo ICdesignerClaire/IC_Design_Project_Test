@@ -1,0 +1,107 @@
+  //方法1//
+  interface arb_if(input bit clk);//1.接口名：arb_if;
+                                  //2.()内，写输入输出信号，按照定义input output的格式写 
+       logic [1:0]grant,request;//这个信号区分于()内的信号，这个是端口内的信号，不用input output
+       logic rst;
+  endinterface
+  
+  //直接在DUT内部使用interface接口
+  module arb(arb_if arbif);
+  always@(posedge arbif.clk or negedge arbif.rst)
+  reg[1:0] reg1;
+  reg1<=arbif.grant;
+  endmodule
+
+
+
+  //方法2//
+  interface arb_if(input bit clk);//bit是SV中的一种数据类型，表示无符号的单比特信号（只能取 0 或 1），通常用于表示控制信号、时钟、复位等简单二进制信号
+       logic[1:0] grant,request;
+       logic rst;
+  endinterface//这里一致，先声明接口，简化后面的引用环节
+  
+  module arb(....);//DUT---核心设计模块，设计文件代码
+  endmodule
+
+  module top//DUT中不采用接口，选择在顶层模块中进行连接，顶层文件通过接口，连接DUT和testbench
+    bit clk;
+    always #2 clk=~clk;
+    arb_if arbif(clk);//例化接口
+    arb al(.grant(arbif.grant),//DUT模块的例化，此时例化使用arbif.clk... 实现通过接口arbif的信号,来连接DUT
+                .request(arbif.request),
+                .rst(arbif.rst),
+                .clk(arbif.clk)
+                );
+     test t1(arbif)//测试用例,这里是对testmodule的例化
+endmodule
+
+// 测试用例示例
+module test(arb_if arbif);
+    initial begin
+        arbif.rst = 1'b1;  // 复位
+        #5 arbif.rst = 1'b0;  // 释放复位
+        
+        // 驱动请求信号
+        #10 arbif.request = 2'b01;  // 第0路请求
+        #10 arbif.request = 2'b10;  // 第1路请求
+        #10 arbif.request = 2'b11;  // 两路同时请求
+        #10 $finish;
+    end
+endmodule
+
+
+//完整的interface//
+interface arb_if(input bit clk);
+   logic [1:0] grant,request;
+   logic rst;
+   clocking cb @(posedge clk);//cb为时钟块的名字,时钟块的触发条件为时钟上升沿
+    output request;// 测试平台通过时钟块输出request信号,仅在时钟上升沿执行
+    input grant;//测试平台通过时钟块输入grant信号
+   endclocking
+
+   modport test(clocking cb,output rst);//端口，用于定义接口对不同模块的连接方式，指明信号的方向
+
+   modport dut(input clk,request,rst,output grant);//这里不用clocking cb是因为request的方向与cb中不一致
+endinterface
+
+
+
+interface signal_test( input bit clk ); //定义接口名
+logic [1:0] A, B;
+logic reset;
+//时钟块，解决依赖clk上升沿的信号
+clocking dram @( posedge clk)
+  input #1ps A;
+  output #6ps B;
+endclocking
+//端口声明
+  modport user1( output A, input B, reset); //声明的端口可以在不同的 modport 里定义为不同的输入输出模式
+  modport user2( clocking dram, input reset); //调用 clocking，port 输入输出和 user1 不一样
+endinterface
+
+module dut (
+signal_test.user1 intf//这里说明dut引用signal_test接口中的名为intf的端口user1
+);
+  intf.A=intf.B;
+endmodule
+
+reg [15:0] ram[0:4095];//verilog  位宽x个数
+//在SV中，上面的形式被称为非组合型
+
+//SV中组合型
+logic [0:4095] [15:0]ram;//4096个16位的ram变量 个数 位宽 x;
+
+//eg:非组合型数组赋值
+int a1 [0:7][0:4095]='{`default:8'h55};
+byte a [0:3][10:0];
+a[1][0]=8'h1;
+a[3]='{'hF,'hA,'hC,'hE};
+
+//组合型赋值
+logic [1:0][1:0][7:0]a;//这是三个位宽拼接在一起，不含[0:x]所以全是位宽，因此a的个数是8*2*2=32
+a[1][1][1]=1'b0;
+//第 1 个索引[1]：定位到第 1 个维度的索引 1（该维度共 2 个索引：0 和 1）；
+//第 2 个索引[1]：定位到第 2 个维度的索引 1（该维度共 2 个索引：0 和 1）；
+//第 3 个索引[1]：定位到第 3 个维度的索引 1（该维度共 8 个索引：0~7）；
+//所以实际定位到单个比特上
+a=32'h1a3b3c4d;//给整个数组赋值
