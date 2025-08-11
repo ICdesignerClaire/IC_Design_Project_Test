@@ -1,0 +1,304 @@
+//DUT
+
+module adder (
+    input a,
+    input b,
+    input cin,
+    output sum,
+    output cout
+);
+    assign {cout,sum}=a+b+cin;
+    
+endmodule
+
+//interface
+interface in_intf();
+    logic a;
+    logic b;
+    logic cin;
+endinterface //in_intf()
+
+interface out_intf();
+    logic sum;
+    logic cout;
+endinterface //out_intf()
+
+//transation:软件世界中数据的基本单位
+class transaction;
+    rand bit a;
+    rand bit b;
+    rand bit cin;
+    bit sum;
+    bit cout;
+
+    constraint c_input{
+        a inside{0,1};
+        b inside{0,1};
+        cin inside{0,1};
+    }
+    function void display_in(string name);
+        $display("----------------------");
+        $display("[%0d]ns %s",$time,name);
+        $display("----------------------");
+        $display("a=%0d, b=%0d ,cin=%0d",a,b,cin);
+        $display("----------------------");    
+    endfunction
+
+    function void display_out(string name);
+        $display("----------------------");
+        $display("[%0d]ns %s",$time,name);
+        $display("----------------------");
+        $display("sum=%0d, cout=%0d ",sum,cout);
+        $display("----------------------");    
+    endfunction
+
+
+endclass //transaction
+
+//generator:产生transaction
+class generator;
+    transaction trans ;
+    mailbox gen2drv ;
+
+    function new(mailbox gen2drv);
+        this.gen2drv=gen2drv;
+    endfunction
+    
+    task  main;
+        repeat(1)begin
+            trans = new();
+            trans.randomize();
+            trans.display_in("Generator");
+            gen2drv.put(trans);
+        end
+        
+    endtask //
+
+endclass //generator
+
+
+//driver:将generator产生的激励传输到DUT中
+class driver;
+    virtual in_intf i_vif;
+    mailbox gen2drv;
+
+    function new(virtual in_intf i_vif,mailbox gen2drv);
+        this.gen2drv=gen2drv;
+        this.i_vif=i_vif;   
+    endfunction //new()
+
+    task  main;
+        repeat(1)begin
+            transaction trans;
+            #1;
+            gen2drv.get(trans);
+            i_vif.a <= trans.a;
+            i_vif.b <= trans.b;
+            i_vif.cin <= trans.cin;
+            trans.display_in("Driver");
+        end
+    endtask //
+endclass //driver
+
+//monitor:实时监控DUT的输入和输出;分为i_monitor和o_monitor;
+class i_monitor;
+    virtual in_intf i_vif;
+    mailbox mon2rml;
+
+    function new(virtual in_intf i_vif,mailbox mon2rml);
+        this.i_vif=i_vif;
+        this.mon2rml=mon2rml;       
+    endfunction //new()
+
+    task  main;
+    repeat(1)begin
+        transaction trans;
+        trans = new();
+        #2;
+        trans.a = i_vif.a;
+        trans.b = i_vif.b;
+        trans.cin = i_vif.cin;
+        mon2rml.put(trans);
+        trans.display_in("Input_monitor");
+    end
+        
+    endtask //
+
+endclass //i_monitor
+
+class o_monitor;
+    virtual out_intf o_vif;
+    mailbox mon2scb;
+    function new(virtual out_intf o_vif , mailbox mon2scb);
+        this.o_vif=o_vif;
+        this.mon2scb=mon2scb;        
+    endfunction //new()
+
+    task main(arguments);
+    repeat(1)begin
+        transaction trans;
+        trans = new();
+        #2;
+        trans.cout=o_vif.cout;
+        trans.sum=o_vif.sum;
+        mon2scb.put(trans);
+        trans.display("out_monitor");
+    end
+    endtask //dj
+endclass //o_monitor
+
+//reference model:完成和DUT相同的功能
+class reference_model;
+    mailbox mon2rml;
+    mailbox rml2scb;
+    transaction r_trans;
+    transaction s_trans;
+    function new(mailbox mon2rml,mailbox rml2scb);
+        this.mon2rml=mon2rml;
+        this.rml2scb=rml2scb;   
+    endfunction //new()
+    task main;
+    repeat(1)begin
+        #3;
+        mon2rml.get(r_trans);
+        s_trans=new();
+        s_trans.sum= r_trans.a ^ r_trans.b ^ r_trans.cin;
+        s_trans.cout = (r_trans.a & r_trans.b) | (r_trans.a & r_trans.cin) | (r_trans.cin & r_trans.b);
+
+        rml2scb.put(s_trans);
+        r_trans.display_in("reference_model");
+        s_trans.display_out("reference_model");
+
+    end
+    endtask
+endclass //reference_model
+
+//scoreboard:比较参考模型和DUT运算后的值是否相同
+class scoreboard;
+    mailbox mon2scb ;
+    mailbox rml2scb ;
+    transaction trans_from_rml;
+    transaction trans_from_mon ;
+    function new(mailbox mon2scb , mailbox rml2scb);
+        this.mon2scb = mon2scb;
+        this.rml2scb = rml2scb;       
+    endfunction //new()
+
+    task main ;
+        repeat(1)begin
+            #4;
+            mon2scb.get(trans_from_mon);
+            rml2scb.get(trans_from_rml);
+            trans_from_mon.display_out("scoreboard_actrue");
+            trans_from_rml.display_out("scoreboard_reference");
+
+            if(trans_from_mon.sum == trans_from_rml.sum && trans_from_mon.cout == trans_from_rml.cout)
+                $display("Result is Expected!");
+            else
+                $display("Error Result!");
+            $display("----------------------------------------");
+        end
+    endtask
+endclass //scoreboard
+
+//environment:把所有类包含到其类中，统一创建接口与信箱。定义run任务，将前面所有类中的main任务并行执行
+`include "transaction.sv"
+`include "generator.sv"
+`include "driver.sv"
+`include "i_monitor.sv"
+`include "o_monitor.sv"
+`include "scoreboard.sv"
+`include "reference_model.sv"
+`include "interface.sv"
+
+
+
+class environment;
+    generator gen ;
+    driver drv ;
+    i_monitor i_mon ;
+    o_monitor o_mon ; 
+    reference rml ;
+    scoreboard scb ;
+    mailbox gen2drv ;
+    mailbox mon2rml ;
+    mailbox mon2scb ;
+    mailbox rml2scb ;
+    virtual in_intf i_vif ;
+    virtual out_intf o_vif ;
+    function new(virtual in_intf i_vif , virtual out_intf o_vif);//environment通过输入输出接口实现配置，内部连接不展出
+        this.i_vif=i_vif;
+        this.o_vif=o_vif;
+        gen2drv = new;
+        mon2rml = new;
+        mon2scb = new;
+        rml2scb = new;
+
+        gen = new(gen2drv);
+        drv = new(i_vif,gen2drv);
+        i_mon = new(i_vif,mon2rml);
+        o_mon = new(o_vif,mon2scb);
+        rml = new(mon2rml,rml2scb);
+        scb = new(rml2scb,mon2scb);
+    endfunction //new()
+
+    task test();//create 1
+        fork
+            gen.main();
+            drv.main();
+            i_mon.main();
+            o_mon.main();
+            rml.main();
+            scb.main();
+        join
+    endtask
+
+    task run();
+        repeat(1)begin
+            test();
+            #3;
+        end
+        $finish;
+    endtask //run
+
+endclass //environment
+
+//test
+`include "environment.sv"
+program test(in_intf i_vif, out_intf o_vif);
+    environment env ;
+    initial begin
+        env = new(i_vif,o_vif);
+        env.run();
+    end
+endprogram
+
+//运行示例
+`include "in_intf.sv"
+`include "in_intf.sv"
+`include "test.sv"
+module testbench_top;
+    in_intf i_vif();
+    out_intf o_vif();
+
+    test test(i_vif,o_vif);
+    adder add(
+        .a(in_intf.a),
+        .b(in_intf.b),
+        .cin(in_intf.cin),
+        .sum(out_intf.sum),
+        .cout(out_intf.cout)
+    );
+
+endmodule
+
+//思考：
+//（1）软件世界的层次结构就与图一一对应，先实例化transaction，后面一一对应
+//（2）仿真的开始通过program的initial begin开始，在environment的run函数中的$finish结束
+//（3）激励在transaction中设置范围，在generator中通过randomize生成
+//（4）激励先产生，按激励的顺序进行；先generator产生激励，然后driver通过interface驱动dut，实时监控interface的输入和输出，并与reference进行比较
+
+
+
+
+
