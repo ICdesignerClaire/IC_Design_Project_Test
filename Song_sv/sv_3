@@ -1,0 +1,219 @@
+//一.类的基本概念
+
+//属性：属性就是类中存储的数据
+//方法：方法是类中定义的函数或任务
+//句柄：句柄是一个变量，它不存储对象本身，而是存储对象在内存中的地址，相当于 "指向对象的指针"
+
+//（一）成员类型：
+//1.所有成员默认为 public
+//2.protected 关键字表示变量和方法只能在当前类或者其子类被访问到
+//3.local 更加苛刻，只允许在当前类的访问
+
+//（二）静态成员：
+//1.类比全局变量
+//2.其类无需实例化，就可直接使用静态成员
+//3.一个静态方法不能访问非静态的属性或方法，也不能使用 this
+//4.静态方法不能是虚的（static 和 virtual 不能同时存在）
+
+//eg:
+class test；
+task static bar()
+endtask //具有静态变量生命周期的非静态方法
+endclass
+
+class test;
+static task bar()
+endtask //具有自动变量生命周期的静态方法
+endclass
+
+//（三）构造函数：
+
+//1.父类的 new 函数给父类变量方法开辟存储空间，子类的 new 函数给子类变量方法开辟存储空间（类内的成员变量和成员
+//方法分开存储）
+
+//2.父类中声明了一个 new 的函数，如果没有显式地去构造一个new函数，即赋初值，子类去继承，就会默认变量初始化,与父类的函数一致
+//仅分配存储空间
+
+//3.构造函数总是返回一个指向该类的对象的句柄，其类型就是类本身（new 函数不能定义成 virtual）
+
+//4. This 和 super：
+//在子类中用父类的成员，需要使用 super.xxx 来调用,用自己类别的，则使用 this.xxx 来调用
+//没有说明this,super 则使用下面的顺序去寻找同名的变量
+//局部变量→ 当前类成员→ 父类成员  注：仅会从低到高寻找，不会从高到低，因为父类有很多子类，从上到下找不准
+
+
+//（四）虚（virtual）方法：
+//一个方法表明了虚方法，那么具体用父类还是子类要关注句柄指向的对象是谁，方法依照指定对象来
+//若未标明虚方法，则依据句柄是哪一类来决定
+
+
+
+//二.对象复制
+//区别于句柄传递
+//句柄传递，p1,p2为地址向量，p1指向new(),p2=p1则，p2指向的对象和p1一致，因此，new()发生变化，则p1,p2同步改变
+Packet p1;
+Packet p2;
+p1=new();
+p2=p1;
+
+//对象复制
+//1.浅复制
+p2=new p1;//p2 指向了另一个和 p1 一样的对象
+
+//2，深复制
+p2=new;
+p2=p1.copy();//深复制
+//深复制和浅复制的区别在于内部嵌套对象，浅复制的两个对象共享嵌套内容，深复制的两个对象的嵌套对象也是独立的
+//即浅复制可能仍使得二者同时小部分一起变化，而深复制，则彻底将二者独立，一方完全无法影响另一方
+
+
+
+//三.类型转换
+//1.向下类型转换：父类转向子类 
+$cast(目标, 源);//将源转向目标，仅有当源句柄指向的对象确实是目标子类对象，才能cast成功
+
+//2.向上类型转换：子类转向父类
+//不需要使用cast，直接 目标=源 即可转换成功
+
+
+
+//四. overload   overwrite   override
+//（一）overload（重载）
+// SV 不支持这种情况，不纠结
+
+//（二）overwrite（覆盖）
+//判断标准：非虚函数
+//根据句柄类型执行对应类的函数
+
+
+//（三）override（重写）
+//判断标准：虚函数
+//根据实际指向对象类型执行对应类的函数
+
+//1.声明类：packet
+class packet
+    int a =1;
+    int b =2;
+
+    function void display_a;
+    $display("packet::a is %0d",a);
+    endfunction
+
+    virtual function void display_b(bit [3:0] num1);
+    $display("num1 is %0d",num1);
+    $display("packet::b is %0d",b);
+    endfunction
+endclass
+//2.声明类：my_packet，(extends packet--->继承packet，即packet的子类)
+class my_packet extends packet
+    int a =3;
+    int b =4;
+
+    function void display_a;
+    $display("my_packet::a is %0d",a);
+    endfunction
+
+    virtual function void display_b(bit [3:0] num2);
+    $display("num2 is %5d",num2);
+    $display("my_packet::b is %0d",b);
+    endfunction
+endclass
+
+module top//在top模块里，集合两个类
+    packet p1;//父类句柄
+    my_packet p2;//子类句柄
+
+    initial begin
+    //给p1,p2两个指针变量都申请各自的存储空间
+    p1=new();
+    p2=new();
+    p1 = p2;//这里实质上是父类句柄p1，引用子类句柄p2，所指向的那个子类对象
+
+    // display_a 是 非虚函数，属于 overwrite（覆盖）场景，非虚函数的调用规则是 “看句柄类型”，不看实际指向的对象
+    //所以这里使用父类，输出1
+    p1.display_a;
+
+    // display_b 是 虚函数，且父子类方法参数类型相同，属于 override（重写）场景，虚函数的调用规则是 “看实际对象类型”，不看句柄类型
+    //所以实际使用子类，输出num2和4
+    p1.display_b(12);
+    end
+endmodule
+//最终的打印结果：
+//packet::a --> 1
+//num2 --> 12
+//my_packet::b --> 4
+
+
+
+//五、随机约束和覆盖率
+//（一）.意义：
+//随机的意义在于提高验证效率，减轻验证人员构造不同激励的压力；
+//约束随机的意义在于保证激励的合理性，控制激励以适应不同场景；
+//覆盖率的意义在于检验随机的完备性，考虑所关心的各种情况是否随机到
+
+//验证=遍历+随机  先遍历再随机；
+//不能只做遍历：因为遍历的测试是有规律生成的，有些不规则情况只能通过随机来实现并进行检测
+//不能只随机：覆盖不全面
+
+
+//（二）.随机如何产生
+//1.SV内置函数产生随机数;
+//2.基于对象的随机生成，随机地初始化对象的数据成员的值;
+//3.标准随机函数 std::randomize()可以随时对任意变量进行随机化并添加约束；
+//用得最多的还是基于 2，因为可以提前写好约束 constraint
+
+class Stim;
+    const bit [31:0] CONGEST_ADDR=42;
+    typedef enum  { READ,WRITE,CONTROL } stim_e;
+    randc stim_e kind;
+    rand bit [31:0] len,src,dst;
+    bit congestion_test;
+
+        constraint c_stim{
+            len<100;
+            len>0;
+            if(congestion_test){
+                dst inside{[CONGEST_ADDR + 100:CONGEST_ADDR - 100]};
+                src=CONGEST_ADDR;
+            }
+            else 
+                src inside{0,[2:10],[100:107]};
+        }
+
+endclass
+
+
+
+//(三).随机的控制
+//1.约束并行生效
+//如需要控制 随机的先后顺序，则使用solve a before b
+
+//2.rand  randomize
+
+//3.若外部所加约束与内部约束冲突，则看内部约束是否加了 soft 关键字，若加了则以外部约束为准，若没加则报错
+
+//4.randc 类似于不放回的随机，等所有情况都遍历到了重置。randc 的成员在 rand 成员前面完成随机
+
+//5.string 和 real 型变量不能被随机，其他数据类型都可以
+
+//6.with 关键词用来给随机化加 临时约束
+
+//7.pre_randomize    post_randomize
+//pre_randomize：随机化前自动执行
+//post_randomize：随机化成功后自动执行；如果随机失败（比如约束冲突），就不执行。
+
+//8.约束权重：做随机时，希望某些地方被更多的被随机到，会去用约束权重这个东西
+rand int scr,dst;
+constraint c_dist{
+    src dist {0:=40,[1:3]:=60};// :=的意思是产生 40 个 0；1-3 每个数产生 60 个，共产生 220个数
+    dst dist (0:/40,[1:3]:/60);// :/的意思是 0 的概率是 40%；1-3 的概率一共是 60%
+}
+
+
+
+//（四）.覆盖率
+//目前被业界广泛采用的覆盖率指标有功能覆盖率（Function Coverage）和代码覆盖率（Code Coverage）
+//二者要结合起来看：
+//1.100%的代码覆盖率以及低于 100%的功能覆盖率，可以看出验证不完整
+//2.100%的功能覆盖率以及低于 100%的代码覆盖率，可以看出代码冗余或验证计划有误
+
