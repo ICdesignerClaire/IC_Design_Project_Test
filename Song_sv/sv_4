@@ -1,0 +1,96 @@
+//本例子的 DUT 很简单，就是 1bit 全加器，主要为了能够快速简单体会基于 SV 和面向对象思想的整体验证框架
+//DUT即 design under test===>待验证设计
+
+//DUT：1bit 全加器
+module adder(a,b,cin,sum,cout);
+input a,b,cin;
+output sum,cout;
+assign {cout,sum} = a + b + cin;
+endmodule
+
+//验证
+//（一）设置接口部分（一切的开始）
+interface in_intf()//输入interface
+logic a;
+logic b;
+logic cin;
+endinterface
+
+interface out_intf()//输出interface
+logic sum;
+logic cout;
+endinterface
+
+//（二）对数据进行抽象————transaction
+//1.transaction就是把interface里pin级别的信号转换成抽象的数据，将细小的数据打包成一个整体，本身是一个事务
+//2.信号多的时候，需要将这些数值组合到一起以构成一个完整的事务（一是驱动更好控制，二是对比数据更方便）因此，事务是验证软件世界中数据的基本单位
+//eg:
+class transaction;//packet class
+//simulus are declared with rand keyword
+rand bit a;
+rand bit b;
+rand bit cin;
+bit sum;
+bit cout;
+constraint c_input{
+a inside {0,1};
+b inside {0,1};
+cin inside {0,1};
+}
+function void display_in(string name);
+$display("-------------------------");
+$display("[%0t]ns %s ",$time,name);
+//$display("-------------------------");
+$display("a = %0d, b = %0d, cin = %0d",a,b,cin);
+$display("-------------------------");
+endfunction
+function void display_out(string name);
+$display("-------------------------");
+$display("[%0t]ns %s ",$time,name);
+//$display("-------------------------");
+$display("sum = %0d, cout = %0d",sum,cout);
+$display("-------------------------");
+endfunction
+endclass
+
+//（三）generator
+//generator 为 DUT 产生受约束随机激励类
+//目标就是产生transaction
+class generator
+transaction trans ;//Handle of Transaction class
+mailbox gen2drv; //mailbox declaration
+function new(mailbox gen2drv); // creation of mailbox and constructor
+this.gen2drv = gen2drv;
+endfunction
+task main;
+repeat(1)begin
+trans = new(); //object for transaction class
+trans.randomize(); //randomization of transaction
+trans.display_in("Generator"); //checking purposew
+gen2drv.put(trans); //putting data into mailbox
+end
+endtask
+endclass
+
+
+//(四) driver
+//Driver 为驱动模块，目的是将 Generator 产生的激励传输到 DUT 中
+class driver;
+virtual in_intf i_vif; //vif is a handle of virtual interface
+mailbox gen2drv; //handle of mailbox
+function new(virtual in_intf i_vif,mailbox gen2drv);
+this.i_vif=i_vif;
+this.gen2drv=gen2drv;
+endfunction
+task main;
+repeat(1)begin
+transaction trans; //handle of transaction class,to get the mailbox data
+#1;
+gen2drv.get(trans);//getting trans data from mainbox
+i_vif.a <= trans.a;
+i_vif.b <= trans.b;
+i_vif.cin <= trans.cin;
+trans.display_in("Driver");
+end
+endtask
+endclass
