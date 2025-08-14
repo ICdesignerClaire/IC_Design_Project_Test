@@ -94,3 +94,209 @@ trans.display_in("Driver");
 end
 endtask
 endclass
+
+
+//（五）monitor
+//Monitor 为验证平台的监控模块，即实时监控 DUT 的输入与输出
+//需设计 DUT 输入监控(i_monitor)与 DUT 输出监控(o_monitor)
+class i_monitor;
+virtual in_intf i_vif; //virtual interface declaration
+mailbox mon2rml; //declaration of mailbox
+function new(virtual in_intf i_vif,mailbox mon2rml);
+this.i_vif=i_vif;
+this.mon2rml=mon2rml;
+endfunction
+task main;
+repeat(1)begin
+transaction trans; //handle of transaction class
+trans = new(); //consturctor or creating object for trans
+#2;
+trans.a = i_vif.a ;//sampling of data in monitor
+trans.b = i_vif.b ;
+trans.cin = i_vif.cin;
+mon2rml.put(trans);
+trans.display_in("input_monitor");
+end
+endtask
+endclass
+
+class o_monitor;
+virtual out_intf o_vif; //virtual interface declaration
+mailbox mon2scb; //declaration of mailbox
+function new(virtual out_intf o_vif,mailbox mon2scb);
+this.o_vif=o_vif;
+this.mon2scb=mon2scb;
+endfunction
+task main;
+repeat(1)begin
+transaction trans; //handle of transaction class
+trans = new(); //consturctor or creating object for trans
+#2;
+trans.sum = o_vif.sum;
+trans.cout = o_vif.cout;
+mon2scb.put(trans);
+trans.display_out("out_monitor");
+//trans.display("output_Monitor");
+end
+endtask
+endclass
+
+
+//（六）reference model
+//reference module（理想模块）是DUT的对照组
+//Reference_model 模块用于完成和 DUT 相同的功能
+//reference_model 的输出被 scoreboard收，用于和 DUT 的输出相比较
+
+//DUT 是可综合电路，而 reference model 则可以直接使
+//用 systemverilog 高级语言的特性，同时还可以通过 DPI 等接口调用其他语言来完成与 DUT
+//相同的功能
+
+class reference_model;
+mailbox mon2rml;
+mailbox rml2scb;
+function new(mailbox mon2rml,mailbox rml2scb);
+this.mon2rml = mon2rml;
+this.rml2scb = rml2scb;
+endfunction
+task main;
+transaction r_trans; //recv transaction from i_monitor
+transaction s_trans; //send transaction to scoreboard
+repeat(1)begin
+#3;
+mon2rml.get(r_trans); // getting info from mailbox
+s_trans = new();
+//reference_model
+s_trans.sum = r_trans.a ^ r_trans.b ^ r_trans.cin;
+s_trans.cout = (r_trans.a&r_trans.b)|(r_trans.b&r_trans.cin)|(r_trans.a&r_trans.cin);
+rml2scb.put(s_trans);
+r_trans.display_in("reference_model");
+s_trans.display_out("reference_model");
+end
+endtask
+endclass
+
+
+
+//（七）scoreboard
+//计分板(Scoreboard)是用于比较参考模型的数值与 DUT 运算后的值是否相同
+//通常把checker 放在 scoreboard 里面，当然 checker 还可以在断言中使用
+
+//一般来说来自参考模型的数值会比来自 DUT 输出的值要快，所以在不断循环产生约束随机激励的验证
+//平台，来自参考模型的数值会不断累积，这时就需要在计分板中定义一个队列，用于存储先
+//带到来的参考模型数值，一旦检测到 DUT 有一个输出到达，立即将队列中数值弹出进行比对，
+//如此循环。本验证平台所设计的是等所有模块都执行完毕，在开启下一次的随机测试，所以没有设计队列用于缓存
+
+class scoreboard;
+mailbox rml2scb;
+mailbox mon2scb;
+function new(mailbox rml2scb,mailbox mon2scb);
+this.rml2scb = rml2scb;
+this.mon2scb = mon2scb;
+endfunction
+task main;
+repeat(1)begin
+transaction rml_tr; //handle of transaction class
+transaction o_mon_tr;
+#4;
+rml2scb.get(rml_tr); // getting info from mailbox
+mon2scb.get(o_mon_tr);
+rml_tr.display_out("scoreboard_reference");
+o_mon_tr.display_out("scoreboard_actrue");
+if(rml_tr.sum==o_mon_tr.sum && rml_tr.cout==o_mon_tr.cout) //reference model
+$display("Result is as Expected");
+else
+$display("Error Result!");
+$display("---------------------------------------------------------------");
+end
+endtask
+endclass
+
+
+
+//（八）environment
+//Environment 类将前面所有的类包含到其类中，统一创建接口与信箱，为前面所有模块中的数据传输建立连接
+//至此，所有模块才算真正紧密联系
+//再定义个 run 任务，将前面所有类中的 main 任务并行执行
+
+
+`include "transaction.sv"
+`include "generator.sv"
+`include "driver.sv"
+`include "i_monitor.sv"
+`include "o_monitor.sv"
+`include "reference_model.sv"
+`include "scoreboard.sv" 
+
+class environment;
+generator gen ;
+driver driv ;
+i_monitor i_mon;
+o_monitor o_mon;
+reference_model rml ;
+scoreboard scb ;
+mailbox gen2drv;//gen to drv
+mailbox mon2rml;//i_mon to refe_model
+mailbox rml2scb;//refe_model to scoreboard
+mailbox mon2scb;//o_mon to scoreboard
+virtual in_intf i_intf;
+virtual out_intf o_intf;
+function new(virtual in_intf i_intf,virtual out_intf o_intf);
+this.i_intf = i_intf;
+this.o_intf = o_intf;
+gen2drv = new();
+mon2rml = new();
+rml2scb = new();
+mon2scb = new();
+gen = new(gen2drv);
+driv = new(i_intf,gen2drv);
+i_mon = new(i_intf,mon2rml);
+rml = new(mon2rml,rml2scb);
+o_mon = new(o_intf,mon2scb);
+scb = new(rml2scb,mon2scb);
+endfunction
+task test();
+fork
+gen.main();
+driv.main();
+i_mon.main();
+rml.main();
+o_mon.main();
+scb.main();
+join
+endtask
+task run;
+repeat(1)begin
+test();
+#5;
+end
+$finish;
+endtask
+endclass
+
+
+//（九）test
+
+`include "environment.sv" 
+program test(in_intf i_intf,out_intf o_intf);
+environment env;
+initial begin
+env = new(i_intf,o_intf);
+env.run();
+end
+endprogram
+
+`include "input_interface.sv"
+`include "output_interface.sv"
+`include "test.sv" 
+module tbench_top;
+in_intf i_intf();
+out_intf o_intf();
+test t1(i_intf,o_intf);
+adder h1(
+.a(i_intf.a),
+.b(i_intf.b),
+.cin(i_intf.cin),
+.sum(out_intf.sum),
+.cout(out_intf.cout)
+);
+endmodule
