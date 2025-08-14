@@ -1,0 +1,282 @@
+//interface
+interface simple_intf(input logic clk);
+    logic da_va;
+    logic [7:0] da;
+
+    modport master (
+    output da_va,
+    output da
+    );
+    modport slave (
+    input da_va,
+    input da
+    );
+endinterface
+
+//transaction
+class transaction;
+    rand bit [31:0] header;
+    rand bit [7:0] payload [];
+    rand bit [31:0] payload_len;
+    //随机约束
+    constraints payload_le_cons{
+        payload_len inside{[0,256]};
+    }
+    constraints payload_load_cons{
+        payload.size = payload_len;
+        solve payload_len before payload;
+    }
+    
+endclass //transaction
+
+//driver:将transaction传输到接口上
+class driver;
+    string ins_name;
+    transaction in_pac[$];
+    transaction tem_pac;
+    virtual simple_intf drv_intf;
+
+    function new(string drv_name,simple_intf drv_in_intf);
+        ins_name = drv_name;
+        drv_intf =drv_in_intf;       
+    endfunction //new()
+    extern task main();
+
+endclass //driver
+task driver::main();
+    while (1) begin
+        if (in_pac.size>0) begin
+            tem_pac = in_pac.pop_front();
+            for (int i = 0;i<tem_pac.payload_len+4 ; i++) begin
+                @posedge(drv_intf.clk);
+                if(i<4)begin
+                    drv_intf.master.da<=tem_pac.header[i*8+:8];//sv语法表示向上切片8位
+                    drv_intf.master.da_va <=1'b1;
+                end
+                else begin
+                    drv_intf.master.da <= tem_pac.payload[i-4];
+                    drv_intf.master.da_va <=1'b1;
+                end
+            end
+            @posedge(drv_intf.clk);
+            drv_intf.master.da_va <=1'b0;
+        end
+        else begin
+            #10ns;//@posedge(drv_intf.clk)
+        end
+    end
+endtask
+
+//monitor
+class monitor;
+    string ins_name;
+    virtual simple_intf mon_intf;
+    transaction temp_pac;
+    transaction out_pac[$];
+
+    function new(string mon_name, simple_intf mon_out_intf);
+        ins_name = mon_name;
+        mon_intf = mon_out_intf;
+    endfunction //new()
+    extern task main();
+endclass //monitor
+task monitor::main();
+    bit [31:0] pac_len;
+    bit [7:0] payload[$];
+    while (1) begin
+        @posedge(mon_intf.clk);
+        if (out_intf.slave.da_va==1'b1) begin
+            pac_len++;
+            payload.push_back(mon_intf.da);
+        end
+        else begin
+            temp_pac = new;
+            temp_pac.payload_len=pac_len;
+            temp_pac.payload = new(pac_len);
+            foreach(temp_pac.payload[i]) temp_pac.payload[i]=payload.pop_front();
+            out_pac.push_back(temp_pac);
+            pac_len=0;
+            payload.delete();
+        end
+    end
+endtask //automatic
+
+
+//reference model
+class ref_model;
+    transaction in_pac[$];
+    transaction out_pac[$];
+    transaction temp_pac;
+    string inst_name
+    function new(string ref_inst_name);
+        inst_name = ref_inst_name;      
+    endfunction //new()
+
+    extern task main();
+endclass //ref_model
+task scoreboard::main ();
+    while (1) begin
+        if (in_pac.size>0) begin
+            temp_pac=in_pac.pop_front();
+            out_pac.push_back(temp_pac)
+        end
+        else begin
+            #10ns;
+        end
+    end
+    
+endtask
+
+//scoreboard
+class scoreboard;
+    string ins_name;
+    transaction ref_pac[$];
+    transaction mon_pac[$];
+    transaction temp_mon_pac;
+    transaction temp_ref_pac;
+    function new(string scb_name);
+        ins_name = scb_name;
+    endfunction //new()
+    extern task main();
+endclass //scoreboard
+task scoreboard::main();
+    bit payload_eq;
+    while (1) begin
+        if (mon_pac.size>0) begin
+            temp_mon_pac=mon_pac.pop_front();
+            if (ref_pac.size>0) begin
+                temp_ref_pac=ref_pac.pop_front();
+                if (temp_mon_pac.payload_len != temp_ref_pac.payload_len) begin//自定义检查的内容
+                    $display("mon_pac's payload_len is not deaired");
+                end
+                else begin
+                    payload_eq=1;
+                    foreach(temp_mon_pac.payload[i])begin
+                        if (temp_mon_pac.payload[i]!=temp_ref_pac.payload[i]) begin
+                            payload_eq=0;
+                        end
+                    end
+                    if (payload_eq) $display("compare pass");
+                    else $display("compare error");
+                end
+            end
+            else $display("mon_pac is not deaired");
+        end
+        else #10ns;
+    end
+endtask
+
+
+//environment
+`include "transaction.sv"
+`include "driver.sv"
+`include "scoreboard.sv"
+`include "simple_intf.sv"
+`include "reference_model.sv"
+`include "monitor.sv"
+class env;
+    driver drv;
+    scoreboard scb;
+    virtual simple_intf drv_intf;
+    virtual simple_intf mon_intf;
+    monitor mon;
+    reference_model ref_model;
+    event finish_event;
+
+    extern virtual function new();
+    extern virtual task ref2scb();
+    extern virtual task mon2scb();
+    extern virtual task run();
+
+endclass //env
+function void env::new(virtual simple_intf drv_intf,virtual simple_intf mon_intf);
+    this.drv_intf=drv_intf;
+    this.mon_intf=mon_intf;
+    drv=new("drv",drv_intf);
+    mon=new("mon",mon_intf);
+    ref_model=new("ref_model");
+    scb = new("scoreboard");
+
+    
+endfunction
+task env::ref2scb();
+    while (1) begin
+        if (ref_model.out_pac.size>0) begin
+            scb.ref_pac.push_back(ref_model.out_pac.pop_front());
+        end
+        else #10ns;
+    end
+endtask
+task  env::mon2scb();
+    while (1) begin
+        if (mon.out_pac.size>0) begin
+            scb.mon_pac.push_back(mon.out_pac.pop_front(););
+        end
+        else #10ns;
+    end
+    
+endtask //
+task  env::run();
+    fork
+        ref2scb();
+        mon2scb();
+        drv.main();
+        mon.main();
+        ref_model.main();
+        scb.main();
+        begin
+            @finish_event;
+        end
+        begin
+            #10ms;
+        end
+    join_any
+endtask //
+
+//testcase
+`include "env.sv"
+program test(simple_intf i_intf,simple_intf o_intf);
+    transaction drv_pac;
+    env env;
+    initial begin
+    fork
+        begin
+            env = new(i_intf,o_intf);
+            env.run();
+        end
+        begin
+            drv_pac=new();
+            drv_pac.randomize();
+            env.drv.in_pac.push_back(drv_pac);
+            env.ref_model.in_pac.push_back(drv_pac);
+            #1000ns;
+            ->env.finish_event;
+        end
+    join_any
+end
+endprogram
+
+
+module harness();
+    simple_intf drv_intf(clk);
+    simple_intf mon_intf(clk);
+    dut inst(
+        .clk(clk),
+        .din(drv_intf.master.da),
+        .din_vld(drv_intf.master.da_va),
+        .dout(mon_intf.slave.da),
+        .dout_vld(mon_intf.slave.da_va)
+    );
+    test test(drv_intf,mon_intf);
+    initial begin
+        clk=0;
+        
+    end
+    always #5 clk=!clk;
+
+
+    
+
+
+
+endmodule
